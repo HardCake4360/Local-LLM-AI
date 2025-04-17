@@ -13,7 +13,7 @@ from io import open
 import itertools
 import math
 import json
-###############아직 어디 넣어야 될지 모르겠음################
+############## 전역공간 ################
 
 # 기본 단어 토큰 값
 PAD_token = 0  # 짧은 문장을 채울(패딩, PADding) 때 사용할 제로 토큰
@@ -29,9 +29,10 @@ clip = 50.0
 teacher_forcing_ratio = 1.0
 learning_rate = 0.0001
 decoder_learning_ratio = 5.0
-n_iteration = 12000
+checkpoint_iter = 200000
+n_iteration = 600000
 print_every = 1
-save_every = 500
+save_every = 100000
 
 ##############################################################
 class Voc:
@@ -626,7 +627,7 @@ if __name__ == '__main__':
 
     # 불러올 checkpoint를 설정합니다. 처음부터 시작할 때는 None으로 둡니다.
     loadFilename = None
-    checkpoint_iter = 12000
+
     
     loadFilename = os.path.join(save_dir, model_name, corpus_name,
                     '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size),
