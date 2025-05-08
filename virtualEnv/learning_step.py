@@ -13,6 +13,8 @@ from io import open
 import itertools
 import math
 import json
+from torch.utils.tensorboard import SummaryWriter
+
 ############## 전역공간 ################
 
 # 기본 단어 토큰 값
@@ -29,10 +31,10 @@ clip = 50.0
 teacher_forcing_ratio = 1.0
 learning_rate = 0.0001
 decoder_learning_ratio = 5.0
-checkpoint_iter = 200000
-n_iteration = 600000
+checkpoint_iter = 500
+n_iteration = 1000
 print_every = 1
-save_every = 100000
+save_every = 20
 
 ##############################################################
 class Voc:
@@ -444,7 +446,7 @@ def train(input_variable, lengths, target_variable, mask, max_target_len, encode
     return sum(print_losses) / n_totals
 
 def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size, print_every, save_every, clip, corpus_name, loadFilename):
-
+    
     # 각 단계에 대한 배치를 읽어옵니다
     training_batches = [batch2TrainData(voc, [random.choice(pairs) for _ in range(batch_size)])
                       for _ in range(n_iteration)]
@@ -455,6 +457,8 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
     print_loss = 0
     if loadFilename:
         start_iteration = checkpoint['iteration'] + 1
+
+    writer = SummaryWriter(log_dir=os.path.join("runs", model_name))
 
     # 학습 루프
     print("Training...")
@@ -472,7 +476,9 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
         if iteration % print_every == 0:
             print_loss_avg = print_loss / print_every
             print("Iteration: {}; Percent complete: {:.1f}%; Average loss: {:.4f}".format(iteration, iteration / n_iteration * 100, print_loss_avg))
+            writer.add_scalar("Loss/train", print_loss_avg, iteration)
             print_loss = 0
+
 
         # Checkpoint를 저장합니다
         if (iteration % save_every == 0):
@@ -489,6 +495,7 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
                 'voc_dict': voc.__dict__,
                 'embedding': embedding.state_dict()
             }, os.path.join(directory, '{}_{}.tar'.format(iteration, 'checkpoint')))
+    writer.close()
 
 class GreedySearchDecoder(nn.Module):
     def __init__(self, encoder, decoder):
@@ -664,7 +671,7 @@ if __name__ == '__main__':
     print('Models built and ready to go!')
     
     #학습 단계
-    if False:
+    if True:
         # Dropout 레이어를 학습 모드로 둡니다
         encoder.train()
         decoder.train()
@@ -694,7 +701,7 @@ if __name__ == '__main__':
            embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size,
            print_every, save_every, clip, corpus_name, loadFilename)
     
-    if True:
+    if False:
         # Dropout 레이어를 평가( ``eval`` ) 모드로 설정합니다
         encoder.eval()
         decoder.eval()
