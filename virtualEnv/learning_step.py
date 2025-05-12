@@ -1,3 +1,6 @@
+#virtual env adress
+#C:\Users\user\Documents\GitHub\Local-LLM-AI\virtualEnv
+
 import torch
 from torch.jit import script, trace
 import torch.nn as nn
@@ -21,8 +24,11 @@ from torch.utils.tensorboard import SummaryWriter
 PAD_token = 0  # 짧은 문장을 채울(패딩, PADding) 때 사용할 제로 토큰
 SOS_token = 1  # 문장의 시작(SOS, Start Of Sentence)을 나타내는 토큰
 EOS_token = 2  # 문장의 끝(EOS, End Of Sentence)을 나태는 토큰
+USR_TOKEN = "<usr>"
+SYS_TOKEN = "<sys>"
 
-MAX_LENGTH = 10  # 고려할 문장의 최대 길이
+
+MAX_LENGTH = 30  # 고려할 문장의 최대 길이
 
 MIN_COUNT = 3    # 제외할 단어의 기준이 되는 등장 횟수
 
@@ -31,10 +37,10 @@ clip = 50.0
 teacher_forcing_ratio = 1.0
 learning_rate = 0.0001
 decoder_learning_ratio = 5.0
-checkpoint_iter = 500
-n_iteration = 1000
+checkpoint_iter = 100000
+n_iteration = 101000
 print_every = 1
-save_every = 20
+save_every = 500
 
 ##############################################################
 class Voc:
@@ -240,6 +246,25 @@ def extractSentencePairs(conversations):
                 qa_pairs.append([inputLine, targetLine])
     return qa_pairs
 
+def buildContextPairs(conversations, max_context_turns=2):
+    qa_pairs = []
+    for conv in conversations.values():
+        context = []
+        lines = conv["lines"]
+        for i in range(1, len(lines)):
+            prev = lines[i - 1]["text"].strip()
+            curr = lines[i]["text"].strip()
+
+            # 문맥 누적
+            context.append(f"{USR_TOKEN if i % 2 == 1 else SYS_TOKEN}: {prev}")
+            if len(context) > max_context_turns:
+                context = context[-max_context_turns:]
+
+            full_context = ' '.join(context)
+            response = f"{SYS_TOKEN if i % 2 == 1 else USR_TOKEN}: {curr}"
+            qa_pairs.append([full_context, response])
+    return qa_pairs
+
 # 유니코드 문자열을 아스키로 변환합니다
 # https://stackoverflow.com/a/518232/2809427 참고
 def unicodeToAscii(s):
@@ -252,7 +277,7 @@ def unicodeToAscii(s):
 def normalizeString(s):
     s = unicodeToAscii(s.lower().strip())
     s = re.sub(r"([.!?])", r" \1", s)
-    s = re.sub(r"[^a-zA-Z.!?]+", r" ", s)
+    s = re.sub(r"[^a-zA-Z0-9<>:/.!?]+", r" ", s)  # 특수토큰 보존
     s = re.sub(r"\s+", r" ", s).strip()
     return s
 
@@ -279,14 +304,28 @@ def filterPairs(pairs):
 # 앞에서 정의한 함수를 이용하여 만든 voc 객체와 리스트 pairs를 반환합니다
 def loadPrepareData(corpus, corpus_name, datafile, save_dir):
     print("Start preparing training data ...")
+    
+    # voc, pairs 불러오기
     voc, pairs = readVocs(datafile, corpus_name)
     print("Read {!s} sentence pairs".format(len(pairs)))
+
+    # 문장 길이 필터링
     pairs = filterPairs(pairs)
     print("Trimmed to {!s} sentence pairs".format(len(pairs)))
+
+    # 단어 추가
     print("Counting words...")
     for pair in pairs:
         voc.addSentence(pair[0])
         voc.addSentence(pair[1])
+
+    # === 특수 토큰 직접 추가 및 보존 처리 ===
+    for token in [USR_TOKEN + ":", SYS_TOKEN + ":"]:
+        voc.addWord(token)
+        # 빈도수를 높게 설정해서 trim() 시 삭제되지 않도록
+        voc.word2count[token] = voc.word2count.get(token, 0) + 9999
+    # =====================================
+
     print("Counted words:", voc.num_words)
     return voc, pairs
 
@@ -592,7 +631,7 @@ if __name__ == '__main__':
     print("\nWriting newly formatted file...")
     with open(datafile, 'w', encoding='utf-8') as outputfile:
         writer = csv.writer(outputfile, delimiter=delimiter, lineterminator='\n')
-        for pair in extractSentencePairs(conversations):
+        for pair in buildContextPairs(conversations, max_context_turns=2):
             writer.writerow(pair)
 
     # 몇 줄을 예제 삼아 출력해 봅니다
