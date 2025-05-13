@@ -30,17 +30,17 @@ SYS_TOKEN = "<sys>"
 
 MAX_LENGTH = 30  # 고려할 문장의 최대 길이
 
-MIN_COUNT = 3    # 제외할 단어의 기준이 되는 등장 횟수
+MIN_COUNT = 1    # 제외할 단어의 기준이 되는 등장 횟수
 
 # 학습 및 최적화 설정
-clip = 50.0
+clip = 1.0
 teacher_forcing_ratio = 1.0
 learning_rate = 0.0001
 decoder_learning_ratio = 5.0
-checkpoint_iter = 100000
-n_iteration = 101000
+checkpoint_iter = 0
+n_iteration = 100000
 print_every = 1
-save_every = 500
+save_every = 1000
 
 ##############################################################
 class Voc:
@@ -198,6 +198,10 @@ class LuongAttnDecoderRNN(nn.Module):
         output = F.softmax(output, dim=1)
         # 출력과 마지막 은닉 상태를 반환합니다
         return output, hidden
+    
+def get_teacher_forcing_ratio(iteration, total_iters):
+    return max(0.5, 1.0 - (iteration / total_iters))
+
 
 def printLines(file, n=10):
     with open(file, 'rb') as datafile:
@@ -256,12 +260,12 @@ def buildContextPairs(conversations, max_context_turns=2):
             curr = lines[i]["text"].strip()
 
             # 문맥 누적
-            context.append(f"{USR_TOKEN.lower if i % 2 == 1 else SYS_TOKEN} {prev}")
+            context.append(f"{USR_TOKEN.lower() if i % 2 == 1 else SYS_TOKEN} {prev}")
             if len(context) > max_context_turns:
                 context = context[-max_context_turns:]
 
             full_context = ' '.join(context)
-            response = f"{SYS_TOKEN.lower if i % 2 == 1 else USR_TOKEN} {curr}"
+            response = f"{SYS_TOKEN.lower() if i % 2 == 1 else USR_TOKEN} {curr}"
             qa_pairs.append([
                     normalizeString(full_context), 
                     normalizeString(response)])
@@ -345,41 +349,40 @@ def loadPrepareData(corpus, corpus_name, datafile, save_dir):
     return voc, pairs
 
 def trimRareWords(voc, pairs, MIN_COUNT):
-    # MIN_COUNT 미만으로 사용된 단어는 voc에서 제외합니다
     voc.trim(MIN_COUNT)
-    
+
+    # 🔁 재등록 보장 (지금까지 사용한 코드)
     for token in [USR_TOKEN.lower(), SYS_TOKEN.lower()]:
         if token not in voc.word2index:
             voc.addWord(token)
             voc.word2count[token] = 9999
-    
-    # 제외할 단어가 포함된 경우를 pairs에서도 제외합니다
+
     keep_pairs = []
     for pair in pairs:
         input_sentence = pair[0]
         output_sentence = pair[1]
-        keep_input = True
-        keep_output = True
-        # 입력 문장을 검사합니다
-        for word in input_sentence.split(' '):
-            if word not in voc.word2index:
-                keep_input = False
-                break
-        # 출력 문장을 검사합니다
-        for word in output_sentence.split(' '):
-            if word not in voc.word2index:
-                keep_output = False
-                break
-
-        # 입출력 문장에 제외하기로 한 단어를 포함하지 않는 경우만을 남겨둡니다
+        keep_input = all(word in voc.word2index for word in input_sentence.split(' '))
+        keep_output = all(word in voc.word2index for word in output_sentence.split(' '))
         if keep_input and keep_output:
             keep_pairs.append(pair)
+        else:
+            # 🔍 디버깅 출력 (임시)
+            if not keep_input or not keep_output:
+                unknown_words = [w for w in input_sentence.split(' ') + output_sentence.split(' ') if w not in voc.word2index]
+                print(f" 제외된 pair (unknown: {unknown_words}): {pair}")
 
     print("Trimmed from {} pairs to {}, {:.4f} of total".format(len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs)))
     return keep_pairs
 
+
 def indexesFromSentence(voc, sentence):
-    return [voc.word2index[word] for word in sentence.split(' ')] + [EOS_token]
+    result = []
+    for word in sentence.split(' '):
+        if word in voc.word2index:
+            result.append(voc.word2index[word])
+        else:
+            continue  # 또는 UNK 토큰 처리 가능
+    return result + [EOS_token]
 
 
 def zeroPadding(l, fillvalue=PAD_token):
@@ -433,7 +436,7 @@ def maskNLLLoss(inp, target, mask):
     return loss, nTotal.item()
 
 def train(input_variable, lengths, target_variable, mask, max_target_len, encoder, decoder, embedding,
-          encoder_optimizer, decoder_optimizer, batch_size, clip, max_length=MAX_LENGTH):
+          encoder_optimizer, decoder_optimizer, batch_size, clip, current_iter, max_length=MAX_LENGTH):
 
     # 제로 그라디언트
     encoder_optimizer.zero_grad()
@@ -462,7 +465,7 @@ def train(input_variable, lengths, target_variable, mask, max_target_len, encode
     decoder_hidden = encoder_hidden[:decoder.n_layers]
 
     # 이번 반복에서 teacher forcing을 사용할지를 결정합니다
-    use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
+    use_teacher_forcing = random.random() < get_teacher_forcing_ratio(current_iter, n_iteration)
 
     # 배치 시퀀스를 한 번에 하나씩 디코더로 포워드 패스합니다
     if use_teacher_forcing:
@@ -529,7 +532,7 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
 
         # 배치에 대해 학습을 한 단계 진행합니다
         loss = train(input_variable, lengths, target_variable, mask, max_target_len, encoder,
-                     decoder, embedding, encoder_optimizer, decoder_optimizer, batch_size, clip)
+                     decoder, embedding, encoder_optimizer, decoder_optimizer, batch_size, clip,iteration)
         print_loss += loss
 
         # 경과를 출력합니다
@@ -623,6 +626,16 @@ def evaluateInput(encoder, decoder, searcher, voc):
 
         except KeyError:
             print("Error: Encountered unknown word.")
+            
+def removeUnknownPairs(voc, pairs):
+    clean_pairs = []
+    for pair in pairs:
+        if all(word in voc.word2index for word in pair[0].split(' ')) and \
+           all(word in voc.word2index for word in pair[1].split(' ')):
+            clean_pairs.append(pair)
+        else:
+            print(f"unknown 제거됨: {pair}")
+    return clean_pairs
 
 if __name__ == '__main__':
     
@@ -696,9 +709,9 @@ if __name__ == '__main__':
     loadFilename = None
 
     
-    loadFilename = os.path.join(save_dir, model_name, corpus_name,
-                    '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size),
-                    '{}_checkpoint.tar'.format(checkpoint_iter))
+    # loadFilename = os.path.join(save_dir, model_name, corpus_name,
+    #                 '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size),
+    #                 '{}_checkpoint.tar'.format(checkpoint_iter))
     
     # ``loadFilename`` 이 존재하는 경우에는 모델을 불러옵니다
     if loadFilename:
@@ -755,11 +768,14 @@ if __name__ == '__main__':
                 if isinstance(v, torch.Tensor):
                     state[k] = v.cuda()
 
+        pairs = removeUnknownPairs(voc, pairs)
+
         # 학습 단계를 수행합니다
         print("Starting Training!")
         trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer,
            embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size,
            print_every, save_every, clip, corpus_name, loadFilename)
+        print(f"학습쌍 수: {len(pairs)}")
     
     if False:
         # Dropout 레이어를 평가( ``eval`` ) 모드로 설정합니다
