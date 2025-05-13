@@ -256,13 +256,15 @@ def buildContextPairs(conversations, max_context_turns=2):
             curr = lines[i]["text"].strip()
 
             # 문맥 누적
-            context.append(f"{USR_TOKEN if i % 2 == 1 else SYS_TOKEN}: {prev}")
+            context.append(f"{USR_TOKEN.lower if i % 2 == 1 else SYS_TOKEN} {prev}")
             if len(context) > max_context_turns:
                 context = context[-max_context_turns:]
 
             full_context = ' '.join(context)
-            response = f"{SYS_TOKEN if i % 2 == 1 else USR_TOKEN}: {curr}"
-            qa_pairs.append([full_context, response])
+            response = f"{SYS_TOKEN.lower if i % 2 == 1 else USR_TOKEN} {curr}"
+            qa_pairs.append([
+                    normalizeString(full_context), 
+                    normalizeString(response)])
     return qa_pairs
 
 # 유니코드 문자열을 아스키로 변환합니다
@@ -276,8 +278,9 @@ def unicodeToAscii(s):
 # 소문자로 만들고, 공백을 넣고, 알파벳 외의 글자를 제거합니다
 def normalizeString(s):
     s = unicodeToAscii(s.lower().strip())
+    s = re.sub(r"<[^>]+>", "", s)
     s = re.sub(r"([.!?])", r" \1", s)
-    s = re.sub(r"[^a-zA-Z0-9<>:/.!?]+", r" ", s)  # 특수토큰 보존
+    s = re.sub(r"[^a-zA-Z0-9:/.!?]+", r" ", s)  # 특수토큰 보존
     s = re.sub(r"\s+", r" ", s).strip()
     return s
 
@@ -290,6 +293,12 @@ def readVocs(datafile, corpus_name):
     # 각 줄을 쪼개어 pairs에 저장하고 정규화합니다
     pairs = [[normalizeString(s) for s in l.split('\t')] for l in lines]
     voc = Voc(corpus_name)
+    
+    # 특수 토큰 강제 등록 및 카운트 보정
+    # for token in [USR_TOKEN + ":", SYS_TOKEN + ":"]:
+    #     voc.addWord(token)
+    #     voc.word2count[token] = voc.word2count.get(token, 0) + 9999
+    
     return voc, pairs
 
 # 문장의 쌍 'p'에 포함된 두 문장이 모두 MAX_LENGTH라는 기준보다 짧은지를 반환합니다
@@ -307,6 +316,12 @@ def loadPrepareData(corpus, corpus_name, datafile, save_dir):
     
     # voc, pairs 불러오기
     voc, pairs = readVocs(datafile, corpus_name)
+    
+    voc.addWord(USR_TOKEN.lower())
+    voc.word2count[USR_TOKEN.lower()] = 9999
+    voc.addWord(SYS_TOKEN.lower())
+    voc.word2count[SYS_TOKEN.lower()] = 9999
+    
     print("Read {!s} sentence pairs".format(len(pairs)))
 
     # 문장 길이 필터링
@@ -319,12 +334,12 @@ def loadPrepareData(corpus, corpus_name, datafile, save_dir):
         voc.addSentence(pair[0])
         voc.addSentence(pair[1])
 
-    # === 특수 토큰 직접 추가 및 보존 처리 ===
-    for token in [USR_TOKEN + ":", SYS_TOKEN + ":"]:
-        voc.addWord(token)
-        # 빈도수를 높게 설정해서 trim() 시 삭제되지 않도록
-        voc.word2count[token] = voc.word2count.get(token, 0) + 9999
-    # =====================================
+    # # === 특수 토큰 직접 추가 및 보존 처리 ===
+    # for token in [USR_TOKEN + ":", SYS_TOKEN + ":"]:
+    #     voc.addWord(token)
+    #     # 빈도수를 높게 설정해서 trim() 시 삭제되지 않도록
+    #     voc.word2count[token] = voc.word2count.get(token, 0) + 9999
+    # # =====================================
 
     print("Counted words:", voc.num_words)
     return voc, pairs
@@ -332,6 +347,12 @@ def loadPrepareData(corpus, corpus_name, datafile, save_dir):
 def trimRareWords(voc, pairs, MIN_COUNT):
     # MIN_COUNT 미만으로 사용된 단어는 voc에서 제외합니다
     voc.trim(MIN_COUNT)
+    
+    for token in [USR_TOKEN.lower(), SYS_TOKEN.lower()]:
+        if token not in voc.word2index:
+            voc.addWord(token)
+            voc.word2count[token] = 9999
+    
     # 제외할 단어가 포함된 경우를 pairs에서도 제외합니다
     keep_pairs = []
     for pair in pairs:
