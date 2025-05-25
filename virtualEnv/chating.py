@@ -4,7 +4,7 @@ import torch.nn as nn
 import os
 
 #불러올 학습파일
-checkpoint_iter = 200000
+checkpoint_iter = 35000
 
 # 모델을 설정합니다
 model_name = 'cb_model'

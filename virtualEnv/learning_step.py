@@ -37,7 +37,7 @@ clip = 1.0
 teacher_forcing_ratio = 1.0
 learning_rate = 0.0001
 decoder_learning_ratio = 5.0
-checkpoint_iter = 0
+checkpoint_iter = 35000
 n_iteration = 100000
 print_every = 1
 save_every = 1000
@@ -744,7 +744,7 @@ if __name__ == '__main__':
     print('Models built and ready to go!')
     
     #학습 단계
-    if True:
+    if False:
         # Dropout 레이어를 학습 모드로 둡니다
         encoder.train()
         decoder.train()
@@ -777,7 +777,7 @@ if __name__ == '__main__':
            print_every, save_every, clip, corpus_name, loadFilename)
         print(f"학습쌍 수: {len(pairs)}")
     
-    if False:
+    if True:
         # Dropout 레이어를 평가( ``eval`` ) 모드로 설정합니다
         encoder.eval()
         decoder.eval()
