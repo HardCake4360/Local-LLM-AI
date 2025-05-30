@@ -1,6 +1,7 @@
 #요구사항
 """
 pip install flask flask-cors
+virtualEnv\RAG_model\app\server.py
 """
 from flask import Flask, request, jsonify
 from flask_cors import CORS

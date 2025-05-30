@@ -1,4 +1,4 @@
-# ui/streamlit_app.py
+# virtualEnv\RAG_model\ui\app.py
 import streamlit as st
 import requests
 

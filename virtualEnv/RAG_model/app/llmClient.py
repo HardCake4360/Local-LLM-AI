@@ -1,4 +1,5 @@
 import requests
+import re
 
 def build_prompt(chunks: list, query: str) -> str:
     """검색된 문단들과 질문을 하나의 프롬프트로 구성"""
@@ -22,6 +23,13 @@ def query_ollama(prompt: str, model: str = "mistral", host: str = "http://localh
     try:
         response = requests.post(url, json=payload)
         response.raise_for_status()
-        return response.json().get("response", "").strip()
+        raw_output = response.json().get("response", "").strip()
+        return addEndMarkers(raw_output)  # <-- 후처리 적용
     except requests.RequestException as e:
         return f"[ERROR] Ollama 호출 실패: {e}"
+
+def addEndMarkers(text: str) -> str:
+    text = re.sub(r'([.!?])\s+', r'\1<END> ', text.strip())
+    if not text.endswith(" <END>"):
+        text += " <END>"
+    return text
