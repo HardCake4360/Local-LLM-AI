@@ -26,11 +26,11 @@ def split_text_to_chunks(text: str, chunk_size: int = 500, overlap: int = 50) ->
     return chunks
 
 def split_by_paragraph(text: str):
-    return [p.strip() for p in text.split('\n\n') if len(p.strip()) > 50]
+    return [p.strip() for p in text.split('\n \n') if len(p.strip()) > 50]
 
 
 if __name__ == "__main__":
-    text = extract_text_from_pdf("example.pdf")
+    text = extract_text_from_pdf("TetoPrompt.pdf")
     chunks = split_by_paragraph(text)
 
     for i, chunk in enumerate(chunks[:3]):
