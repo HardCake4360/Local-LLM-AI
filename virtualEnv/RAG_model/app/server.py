@@ -54,25 +54,49 @@ def ask_question():
 
 @app.route("/ask-stream", methods=["POST"])
 def ask_stream():
-    data = request.get_json()
-    print("수신한 JSON 데이터:", data)
-    question = data.get("question")
-    if not question:
-        return "질문이 없습니다",400
-    
-    top_chunks = retriever.search(question)
-    print("[DEBUG] 검색된 chunk:")
-    for c in top_chunks:
-        print(f"{c[:100]}...")
+    try:
+        data = request.get_json()
+        print("수신한 JSON 데이터:", data)
 
-    prompt = build_prompt(top_chunks, question)
-    
-    def generate():
-        for chunk in query_ollama_stream(prompt,"gemma3:12b"):
-            print("서버가 전송 중:", chunk)
-            yield chunk + "\n" #줄단위 전송
-    
-    return Response(stream_with_context(generate()),content_type='text/plain')
+        question = data.get("question")
+        user_id = data.get("user_id", "anonymous")
+        print(f"[DEBUG] 질문: {question}, 유저: {user_id}")
+
+        if not question:
+            return "질문이 없습니다", 400
+
+        user_chunks = split_text_to_chunks(question)
+        user_index_path = f"virtualEnv/RAG_model/app/data/user_{user_id}"
+
+        print("[DEBUG] 유저 인덱스 업데이트 시작")
+        
+        print(f"[DEBUG] 참조 중인 유저 DB 파일: {user_index_path}.index")
+        retriever.update_user_index(user_index_path, user_chunks)
+        print("[DEBUG] 유저 인덱스 업데이트 완료")
+
+        top_chunks = retriever.search(question)
+        print("[DEBUG] 검색된 chunk 수:", len(top_chunks))
+        for i, chunk in enumerate(top_chunks):
+            print(f"  [{i}] {chunk[:80]}...")
+        
+        # user_chunks 내용 출력
+        print(f"[DEBUG] 현재 user_chunks ({len(retriever.user_chunks)}개):")
+        for i, chunk in enumerate(retriever.user_chunks[:]):
+            print(f"  [{i}] {chunk[:80]}...")
+
+        prompt = build_prompt(top_chunks, question)
+
+        def generate():
+            for chunk in query_ollama_stream(prompt, "gemma3:12b"):
+                yield chunk + "\n"
+
+        return Response(stream_with_context(generate()), content_type='text/plain')
+
+    except Exception as e:
+        import traceback
+        print("[ERROR] ask_stream 예외 발생:")
+        traceback.print_exc()
+        return f"[SERVER ERROR] {str(e)}", 500
 
 
 if __name__ == "__main__":
