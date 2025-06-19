@@ -56,7 +56,6 @@ def ask_question():
 def ask_stream():
     try:
         data = request.get_json()
-        print("수신한 JSON 데이터:", data)
 
         question = data.get("question")
         user_id = data.get("user_id", "anonymous")
@@ -68,20 +67,19 @@ def ask_stream():
         user_chunks = split_text_to_chunks(question)
         user_index_path = f"virtualEnv/RAG_model/app/data/user_{user_id}"
 
-        print("[DEBUG] 유저 인덱스 업데이트 시작")
-        
-        print(f"[DEBUG] 참조 중인 유저 DB 파일: {user_index_path}.index")
-        retriever.update_user_index(user_index_path, user_chunks)
-        print("[DEBUG] 유저 인덱스 업데이트 완료")
-
         top_chunks = retriever.search(question)
         print("[DEBUG] 검색된 chunk 수:", len(top_chunks))
         for i, chunk in enumerate(top_chunks):
             print(f"  [{i}] {chunk[:80]}...")
+            
+        # print("[DEBUG] 유저 인덱스 업데이트 시작")
+        # print(f"[DEBUG] 참조 중인 유저 DB 파일: {user_index_path}.index")
+        retriever.update_user_index(user_index_path, user_chunks)
+        # print("[DEBUG] 유저 인덱스 업데이트 완료")
         
         # user_chunks 내용 출력
         print(f"[DEBUG] 현재 user_chunks ({len(retriever.user_chunks)}개):")
-        for i, chunk in enumerate(retriever.user_chunks[:]):
+        for i, chunk in enumerate(retriever.user_chunks[:3]):
             print(f"  [{i}] {chunk[:80]}...")
 
         prompt = build_prompt(top_chunks, question)

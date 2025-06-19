@@ -2,7 +2,7 @@
 """
 pip install sentence-transformers faiss-cpu
 """
-# app/retriever.py
+# server/retriever.py
 from sentence_transformers import SentenceTransformer, util
 import faiss
 import numpy as np
@@ -12,8 +12,10 @@ import pickle
 class Retriever:
     def __init__(self, model_name='all-MiniLM-L6-v2'):
         self.model = SentenceTransformer(model_name)
-        self.index = None
         self.text_chunks = []
+        self.user_chunks = []
+        self.index = None
+        self.user_index = None  # ← 이 줄이 반드시 필요합니다!!!
 
     def build_index(self, text_chunks: list):
         """문단을 벡터화하고 FAISS 인덱스 생성"""
