@@ -13,7 +13,7 @@ from llmClient import build_prompt, query_ollama, query_ollama_stream
 app = Flask(__name__)
 CORS(app)
 
-PDF_NAME = "TetoPrompt" #PDF파일 이름
+PDF_NAME = "RoseSimulaPrompt" #PDF파일 이름
 PDF_PATH = "virtualEnv/RAG_model/app/data/"+ PDF_NAME +".pdf"   #PDF 경로
 INDEX_PATH = "virtualEnv/RAG_model/app/data/my_index"
 
