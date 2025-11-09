@@ -13,7 +13,7 @@ from llmClient import build_prompt, query_ollama, query_ollama_stream
 app = Flask(__name__)
 CORS(app)
 
-PDF_NAME = "RoseSimulaPrompt" #PDF파일 이름
+PDF_NAME = "DatabasePrompt" #PDF파일 이름
 PDF_PATH = "virtualEnv/RAG_model/app/data/"+ PDF_NAME +".pdf"   #PDF 경로
 INDEX_PATH = "virtualEnv/RAG_model/app/data/my_index"
 
@@ -63,6 +63,8 @@ def ask_stream():
 
         if not question:
             return "질문이 없습니다", 400
+        
+        #user index update 구문-----------------------------------------
 
         user_chunks = split_text_to_chunks(question)
         user_index_path = f"virtualEnv/RAG_model/app/data/user_{user_id}"
@@ -81,6 +83,8 @@ def ask_stream():
         print(f"[DEBUG] 현재 user_chunks ({len(retriever.user_chunks)}개):")
         for i, chunk in enumerate(retriever.user_chunks[:3]):
             print(f"  [{i}] {chunk[:80]}...")
+            
+        #user index update 구문-----------------------------------------
 
         prompt = build_prompt(top_chunks, question)
 

@@ -26,7 +26,7 @@ def split_text_to_chunks(text: str, chunk_size: int = 500, overlap: int = 50) ->
     return chunks
 
 def split_by_paragraph(text: str):
-    return [p.strip() for p in text.split('\n \n') if len(p.strip()) > 50]
+    return [p.strip() for p in text.split('\n \n') if len(p.strip()) > 10]
 
 
 if __name__ == "__main__":
