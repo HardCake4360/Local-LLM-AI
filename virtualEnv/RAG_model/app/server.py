@@ -6,7 +6,7 @@ virtualEnv\RAG_model\app\server.py
 from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 import os
-from documentHandler import extract_text_from_pdf, split_text_to_chunks, split_by_paragraph
+from documentHandler import extract_text_from_pdf, split_text_to_chunks
 from retriever import Retriever
 from llmClient import build_prompt, query_ollama, query_ollama_stream
 
@@ -24,11 +24,7 @@ def init_index():
     if not os.path.exists(INDEX_PATH + ".index"):
         print("🔍 PDF 인덱스 생성 중...")
         text = extract_text_from_pdf(PDF_PATH)
-        print(f"[DEBUG] PDF 텍스트 길이: {len(text)}")
-        chunks = split_by_paragraph(text)
-        print(f"[DEBUG] 생성된 chunk 수: {len(chunks)}")
-        for i, c in enumerate(chunks[:5]):
-            print(f"[Chunk {i}] {c[:20]}...")
+        chunks = split_text_to_chunks(text)
         retriever.build_index(chunks)
         retriever.save_index(INDEX_PATH)
         print("✅ 인덱스 생성 완료")
@@ -66,25 +62,30 @@ def ask_stream():
         
         #user index update 구문-----------------------------------------
 
-        user_chunks = split_text_to_chunks(question)
-        user_index_path = f"virtualEnv/RAG_model/app/data/user_{user_id}"
+        # user_chunks = split_text_to_chunks(question)
+        # user_index_path = f"virtualEnv/RAG_model/app/data/user_{user_id}"
 
-        top_chunks = retriever.search(question)
-        print("[DEBUG] 검색된 chunk 수:", len(top_chunks))
-        for i, chunk in enumerate(top_chunks):
-            print(f"  [{i}] {chunk[:80]}...")
+        # top_chunks = retriever.search(question)
+        # print("[DEBUG] 검색된 chunk 수:", len(top_chunks))
+        # for i, chunk in enumerate(top_chunks):
+        #     print(f"  [{i}] {chunk[:80]}...")
             
-        # print("[DEBUG] 유저 인덱스 업데이트 시작")
-        # print(f"[DEBUG] 참조 중인 유저 DB 파일: {user_index_path}.index")
-        retriever.update_user_index(user_index_path, user_chunks)
-        # print("[DEBUG] 유저 인덱스 업데이트 완료")
+        # # print("[DEBUG] 유저 인덱스 업데이트 시작")
+        # # print(f"[DEBUG] 참조 중인 유저 DB 파일: {user_index_path}.index")
+        # retriever.update_user_index(user_index_path, user_chunks)
+        # # print("[DEBUG] 유저 인덱스 업데이트 완료")
         
-        # user_chunks 내용 출력
-        print(f"[DEBUG] 현재 user_chunks ({len(retriever.user_chunks)}개):")
-        for i, chunk in enumerate(retriever.user_chunks[:3]):
-            print(f"  [{i}] {chunk[:80]}...")
+        # # user_chunks 내용 출력
+        # print(f"[DEBUG] 현재 user_chunks ({len(retriever.user_chunks)}개):")
+        # for i, chunk in enumerate(retriever.user_chunks[:3]):
+        #     print(f"  [{i}] {chunk[:80]}...")
             
         #user index update 구문-----------------------------------------
+
+        top_chunks = retriever.search(question)
+        print("[DEBUG] 검색된 chunk:")
+        for c in top_chunks:
+            print(f"{c[:100]}...")
 
         prompt = build_prompt(top_chunks, question)
 

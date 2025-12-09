@@ -30,7 +30,7 @@ def split_by_paragraph(text: str):
 
 
 if __name__ == "__main__":
-    text = extract_text_from_pdf("TetoPrompt.pdf")
+    text = extract_text_from_pdf("example.pdf")
     chunks = split_by_paragraph(text)
 
     for i, chunk in enumerate(chunks[:3]):
