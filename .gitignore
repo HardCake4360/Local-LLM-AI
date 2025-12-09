@@ -177,3 +177,9 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
+virtualEnv/RAG_model/app/data/my_index.index
+virtualEnv/RAG_model/app/data/my_index.index
+virtualEnv/RAG_model/app/data/my_index_chunks.pkl
+virtualEnv/RAG_model/app/data/TetoPrompt.pdf
+virtualEnv/RAG_model/app/data/user_test.index
+virtualEnv/RAG_model/app/data/user_test_chunks.pkl
