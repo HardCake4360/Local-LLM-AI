@@ -30,3 +30,28 @@ def reset_log(user_id: str) -> None:
     p = _path(user_id)
     if os.path.exists(p):
         os.remove(p)
+    reset_summary(user_id)  # 추가
+
+def _summary_path(user_id: str) -> str:
+    return os.path.join(BASE, f"{user_id}.summary.json")
+
+def write_summary(user_id: str, summary: dict) -> None:
+    """요약 캐시 저장 (다음 요청에서 즉시 사용)"""
+    with open(_summary_path(user_id), "w", encoding="utf-8") as f:
+        json.dump(summary, f, ensure_ascii=False)
+
+def read_summary(user_id: str) -> dict | None:
+    """요약 캐시 로드"""
+    p = _summary_path(user_id)
+    if not os.path.exists(p):
+        return None
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return None
+
+def reset_summary(user_id: str) -> None:
+    p = _summary_path(user_id)
+    if os.path.exists(p):
+        os.remove(p)

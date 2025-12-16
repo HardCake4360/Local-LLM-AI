@@ -21,7 +21,8 @@ def build_prompt_v2(chunks: list, query: str, persona: dict | None) -> str:
     document = "\n\n".join(chunks)
     base = (
         "다음 문서를 참고하여 질문에 답변하세요.\n\n"
-        f"문서:\n{document}\n\n"
+        "질문 받은 언어를 사용하여 답변하세요.\n\n"
+        f"문서: {document}\n\n"
         f"질문: {query}\n"
     )
 
@@ -31,6 +32,7 @@ def build_prompt_v2(chunks: list, query: str, persona: dict | None) -> str:
         persona_text = (
             "\n[페르소나 지침]\n"
             f"- Identity: {persona.get('identity',{})}\n"
+            f"- ReactionByFeeling: {persona.get('ReactionByFeeling',{})}\n"
             f"- Personality(BigFive/core_needs/defense): {persona.get('personality',{})}\n"
             f"- Linguistic Style: {persona.get('linguistic_style',{})}\n"
             f"- Affective Rules: {persona.get('affective_rules',{})}\n"

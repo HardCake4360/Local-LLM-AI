@@ -8,9 +8,10 @@ except Exception:
 
 DEFAULT_MODEL = "gemma3:12b"
 
-SYSTEM_SPEC = """You are a conversational summarizer that captures not only the facts but also the emotional and motivational context of a dialogue.
-Return STRICTLY valid minified JSON (no trailing commas, no extra text).
-The JSON schema is:
+SYSTEM_SPEC = """너는 대화의 사실뿐만 아니라 감정적·동기적 맥락까지 포착하는 대화 요약기이다.
+반드시 유효한 최소화(minified) JSON만 반환해야 하며 (후행 쉼표 금지, JSON 외 텍스트 금지) 다른 설명은 포함하지 않는다.
+
+JSON 스키마는 다음과 같다:
 {
   "summary": string,
   "user_emotion": string,
@@ -23,26 +24,29 @@ The JSON schema is:
   },
   "topics": string[]
 }
-Guidelines:
-- "summary": overall meaning of the recent exchange in 2–4 sentences.
-- "user_emotion": describe the user's emotional tone (e.g. frustrated, curious, happy, anxious, neutral).
-- "user_goal": infer the underlying goal or intention behind the user's recent behavior or questions.
-- "salient_facts": concise facts or events mentioned.
-- "entities": key people, projects, or named objects.
-- "relationship_state": inferred interpersonal state.
-- "topics": main discussion subjects.
-Constraints:
-- SUMMARY must be 1–4 short sentences (not transcript, not bullet list).
-- Do NOT echo headings like 'Earlier:' or 'Recent:'; produce a condensed narrative only.
-- Output in the same language as messages.
-- NEVER include explanations outside JSON.
+
+가이드라인:
+-"summary": 최근 대화의 전체 의미를 2–4문장으로 요약한다.
+-"user_emotion": 사용자의 감정적 톤을 설명한다 (예: 좌절, 호기심, 만족, 불안, 중립 등).
+-"user_goal": 사용자의 최근 행동이나 질문 이면에 있는 목표나 의도를 추론한다.
+-"salient_facts": 언급된 핵심 사실이나 사건을 간결하게 나열한다.
+-"entities": 주요 인물, 프로젝트, 고유명사 객체를 포함한다.
+-"relationship_state": 사용자와 상대 간의 관계 상태를 추론한다.
+-"topics": 주요 논의 주제를 나열한다.
+
+제약 조건:
+-SUMMARY는 1–4개의 짧은 문장이어야 하며 (대화 원문이나 목록 형태 금지).
+-'Earlier:', 'Recent:' 같은 구분 헤딩을 반복하지 말고 압축된 서술형 요약만 출력한다.
+-출력 언어는 입력 메시지와 동일한 언어를 사용한다.
+-JSON 외부에 어떠한 설명도 절대 포함하지 않는다.
 """
 
 
-USER_INSTRUCTIONS_TMPL = """Transcript (most recent first or in given order). Each line: "<speaker>: <text>":
-{transcript}
+USER_INSTRUCTIONS_TMPL = """Transcript (가장 최근 발언이 먼저 오거나, 주어진 순서대로 정렬됨).
+각 줄의 형식: 
+"<speaker>: <text>": {transcript}
 
-Make the output terse and useful for a downstream LLM memory system."""
+출력은 간결하고 핵심 위주로 작성하며, 후속 LLM 메모리 시스템에서 활용하기에 적합해야 한다."""
 
 def _build_transcript(history: List[Dict[str, str]], recent_turns: int) -> str:
     recent = history[-recent_turns:] if recent_turns > 0 else history

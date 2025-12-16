@@ -3,8 +3,12 @@
 pip install flask flask-cors
 virtualEnv\RAG_model\app\server.py
 """
+import time
 from persona_store import load_persona, list_persona_keys
-from chatlog import append_log, read_log, reset_log
+
+from chatlog import append_log, read_log, reset_log, read_summary, write_summary
+import threading
+
 
 from summarizer import summarize_context
 from summarizer_llm import summarize_context_llm
@@ -103,6 +107,9 @@ def ask_stream():
         if not question:
             return "질문이 없습니다", 400
 
+        # 요청 시각 기록
+        start_time = time.time()
+    
         # 로그 기록: 유저 발화
         append_log(user_id, "user", question)
 
@@ -117,49 +124,46 @@ def ask_stream():
         history = [{"speaker": h.get("speaker"), "text": h.get("text")} for h in hist]
         
         #rule based
-        # summary = summarize_context(history, recent_turns=20, max_tokens=256)
+        #summary = summarize_context(history, recent_turns=20, max_tokens=256)
         
-        #llm based
-        summary = summarize_context_llm(
-            history=history,
-            recent_turns=20,
-            model="gemma3:12b",
-            max_tokens=256,
-            fallback_rule_based=True,
-            rule_based_fn=summarize_context_rule_based
-        )
-        summary_line = f"[대화요약] {summary['summary']}"
-        merged_chunks = [summary_line] + top_chunks
+        # #llm based
+        # summary = summarize_context_llm(
+        #     history=history,
+        #     recent_turns=20,
+        #     model="gemma3:12b",
+        #     max_tokens=256,
+        #     fallback_rule_based=True,
+        #     rule_based_fn=summarize_context_rule_based
+        # )
+        # summary_line = f"[대화요약] {summary['summary']}"
+        # merged_chunks = [summary_line] + top_chunks
 
+        # 캐시 사용 방식: 저장된 요약 캐시를 사용 (없으면 생략)
+        summary = read_summary(user_id)
+        merged_chunks = top_chunks
+        if summary and (summary.get("summary") or "").strip():
+            summary_line = f"[대화요약] {summary['summary']}"
+            merged_chunks = [summary_line] + top_chunks
+        
         # 페르소나 포함 프롬프트
         prompt = build_prompt_v2(merged_chunks, question, persona)
-        
-        summary_text = summary.get("summary") or ""
-        rel = summary.get("relationship_state", {})
-        trust = rel.get("user_trust", 0.0)
-        closeness = rel.get("closeness", "unknown")
-
-        # 폴백 감지(LLM이 제대로 안 나오면 user_goal이 비거나 None일 확률 높음)
-        mode = "LLM" if summary.get("user_goal") is not None else "RULE-BASED(FALLBACK)"
-                
-        # 로그
-        print("\n[RETRIEVE] =======================")
-        print(f"User: {user_id} | Persona: {persona_key or 'assistant'}")
-        print(f"[MODE] {mode}")
-        print(f"[요약] {summary_text}")
-        print(f"[USER_GOAL] {summary.get('user_goal')}")
-        print(f"[대화 주제] {', '.join(summary.get('topics', []))}")
-        print(f"[관계 상태] {rel}\n")  # 따옴표 충돌 방지
 
         for i, c in enumerate(top_chunks, 1):
-            head = (c[:160] + "…") if len(c) > 160 else c
+            head = (c[:20] + "…") if len(c) > 20 else c
             print(f"[{i}] {head}")
         print("=================================\n")
 
         def generate():
+            nonlocal start_time
+            first_chunk_logged = False
             buffer = []
             # 모델 이름은 기존과 동일하게 사용, 필요 시 config로 분리
             for chunk in query_ollama_stream(prompt, "gemma3:12b"):
+                if not first_chunk_logged:
+                    latency = time.time() - start_time
+                    # 지연시간 로그 출력 또는 저장
+                    print(f"[LATENCY] user={user_id} persona={persona_key or 'assistant'} took {latency:.2f}s to first token")
+                    first_chunk_logged = True
                 buffer.append(chunk)
                 yield chunk + "\n"
             
@@ -167,9 +171,46 @@ def ask_stream():
             full_answer = "".join(buffer).strip()
             speaker = persona_key if persona_key else "assistant"
             try:
-                append_log(user_id, speaker, full_answer)      # ★ 추가
+                append_log(user_id, speaker, full_answer)
             except Exception as log_err:
                 print(f"[WARN] 답변 로그 기록 실패: {log_err}")
+            
+            #스트리밍 완료 후 컨택스트 요약 갱신
+            threading.Thread(target=_update_summary_background, daemon=True).start()
+
+        def _update_summary_background():
+            try:
+                hist = read_log(user_id, max_items=60)
+                history = [{"speaker": h.get("speaker"), "text": h.get("text")} for h in hist]
+
+                summary = summarize_context_llm(
+                    history=history,
+                    recent_turns=20,
+                    model="gemma3:12b",
+                    max_tokens=256,
+                    fallback_rule_based=True,
+                    rule_based_fn=summarize_context_rule_based
+                )
+                write_summary(user_id, summary)
+                print(f"[SUMMARY] updated for user={user_id}")
+                
+                summary_text = summary.get("summary") or ""
+                rel = summary.get("relationship_state", {})
+                trust = rel.get("user_trust", 0.0)
+                closeness = rel.get("closeness", "unknown")
+
+                mode = "LLM" if summary.get("user_goal") is not None else "RULE-BASED(FALLBACK)"
+
+                print("\n[SUMMARY UPDATE] =======================")
+                print(f"User: {user_id} | Persona: {persona_key or 'assistant'}")
+                print(f"[MODE] {mode}")
+                print(f"[요약] {summary_text}")
+                print(f"[USER_GOAL] {summary.get('user_goal')}")
+                print(f"[대화 주제] {', '.join(summary.get('topics', []))}")
+                print(f"[관계 상태] {rel}")
+                print("=======================================\n")
+            except Exception as e:
+                print(f"[WARN] summary update failed: {e}")
 
         # ★ 로그 기록: 시스템이 보낸 프롬프트 일부를 저장하진 않고,
         #   스트리밍 완료 후 모델 응답을 합쳐 저장하려면 클라이언트에서 수신 후 /log/append 호출 권장
