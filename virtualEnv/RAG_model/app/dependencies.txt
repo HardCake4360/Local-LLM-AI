@@ -1,0 +1,28 @@
+# Core server
+python>=3.10
+flask
+flask-cors
+waitress
+
+# LLM / Inference
+requests
+ollama (external service)
+
+# RAG / NLP
+sentence-transformers
+faiss-cpu
+numpy
+
+# PDF / Document processing
+pymupdf
+
+# Utilities
+json (builtin)
+threading (builtin)
+time (builtin)
+os (builtin)
+re (builtin)
+typing (builtin)
+
+# Optional / Dev
+streamlit (UI client, optional)
