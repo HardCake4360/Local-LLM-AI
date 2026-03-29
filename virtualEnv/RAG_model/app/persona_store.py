@@ -1,7 +1,7 @@
 import os, json
 from functools import lru_cache
 
-PERSONA_DIR = "virtualEnv/RAG_model/app/data/personas"
+PERSONA_DIR = "app/data/personas"
 
 @lru_cache(maxsize=64)
 def list_persona_keys():
