@@ -1,7 +1,8 @@
 import os, json
 from functools import lru_cache
 
-PERSONA_DIR = "app/data/personas"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PERSONA_DIR = os.path.join(BASE_DIR, "data", "personas")
 
 @lru_cache(maxsize=64)
 def list_persona_keys():
