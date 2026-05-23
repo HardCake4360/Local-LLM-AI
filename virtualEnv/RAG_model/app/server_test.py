@@ -1,4 +1,4 @@
-﻿#요구사항
+#요구사항
 """
 pip install flask flask-cors
 virtualEnv\\RAG_model\\app\\server.py
@@ -1014,7 +1014,42 @@ def _build_investigation_prompt(
     return prompt
 
 
-def _build_reply_prompt(
+def _normalize_attached_item_directive(interaction: Dict[str, Any]) -> Dict[str, Any]:
+    directive = (interaction or {}).get("attachedItemDirective") or {}
+    return {
+        "itemId": str(directive.get("itemId") or ""),
+        "itemCategory": str(directive.get("itemCategory") or ""),
+        "itemDisplayName": str(directive.get("itemDisplayName") or ""),
+        "itemPrompt": _safe_reply_text(directive.get("itemPrompt") or ""),
+        "attitudeThreshold": round(_to_float(directive.get("attitudeThreshold"), 0.0), 3),
+        "currentAttitude": round(_to_float(directive.get("currentAttitude"), 0.0), 3),
+        "thresholdSatisfied": bool(directive.get("thresholdSatisfied")),
+        "responseDirectivePrompt": _safe_reply_text(directive.get("responseDirectivePrompt") or ""),
+        "bypassWorldContextRag": bool(directive.get("bypassWorldContextRag")),
+        "followingItemId": str(directive.get("followingItemId") or ""),
+        "followingItemCategory": str(directive.get("followingItemCategory") or ""),
+    }
+
+
+def _format_attached_item_directive(attached_item_directive: Dict[str, Any]) -> str:
+    if not attached_item_directive or not attached_item_directive.get("responseDirectivePrompt"):
+        return "- 없음"
+
+    lines = [
+        f"- itemId: {attached_item_directive.get('itemId', '')}",
+        f"- itemCategory: {attached_item_directive.get('itemCategory', '')}",
+        f"- itemDisplayName: {attached_item_directive.get('itemDisplayName', '')}",
+        f"- currentAttitude: {attached_item_directive.get('currentAttitude', 0.0)}",
+        f"- attitudeThreshold: {attached_item_directive.get('attitudeThreshold', 0.0)}",
+        f"- thresholdSatisfied: {attached_item_directive.get('thresholdSatisfied', False)}",
+        f"- bypassWorldContextRag: {attached_item_directive.get('bypassWorldContextRag', False)}",
+        f"- followingItemId: {attached_item_directive.get('followingItemId', '')}",
+        f"- responseDirectivePrompt: {attached_item_directive.get('responseDirectivePrompt', '')}",
+    ]
+    return os.linesep.join(lines)
+
+
+def _build_reply_prompt_general(
     payload: Dict[str, Any],
     persona: Dict[str, Any],
     conversation_state: Dict[str, Any],
@@ -1094,6 +1129,85 @@ def _build_reply_prompt(
 """.strip()
     return prompt
 
+
+def _build_reply_prompt_attached(
+    payload: Dict[str, Any],
+    persona: Dict[str, Any],
+    conversation_state: Dict[str, Any],
+    attached_item_directive: Dict[str, Any],
+) -> str:
+    scene_id = payload.get("sceneId") or "unknown_scene"
+    npc_id = payload.get("npcId") or "unknown_npc"
+    phase = payload.get("phase") or "investigation"
+    interaction = payload.get("interaction") or {}
+    scene_state = payload.get("sceneState") or {}
+    npc_local_state = payload.get("npcLocalState") or {}
+    conversation_context = payload.get("conversationContext") or {}
+
+    action_type = interaction.get("actionType") or "Talk"
+    player_intent_text = interaction.get("playerIntentText") or ""
+    topic_id = interaction.get("topicId")
+    evidence_id = interaction.get("evidenceId")
+
+    recent_exchanges = conversation_context.get("recentExchanges") or []
+    recent_lines = []
+    for ex in recent_exchanges[-6:]:
+        speaker = ex.get("speaker", "unknown")
+        text = _safe_reply_text(ex.get("text", ""))
+        if text:
+            recent_lines.append(f"- {speaker}: {text}")
+
+    persona_json = json.dumps(persona or {}, ensure_ascii=False, indent=2)
+    scene_state_json = json.dumps(scene_state, ensure_ascii=False, indent=2)
+    npc_state_json = json.dumps(npc_local_state, ensure_ascii=False, indent=2)
+    conversation_state_json = json.dumps(_normalize_conversation_state(conversation_state), ensure_ascii=False, indent=2)
+    attached_item_text = _format_attached_item_directive(attached_item_directive)
+
+    prompt = f"""
+너는 한국어 추리 게임 속 NPC다. 지금부터 첨부된 조사 정보에 대한 응답만 생성한다.
+
+[페르소나 데이터]
+{persona_json}
+
+[현재 조사 정보]
+- sceneId: {scene_id}
+- phase: {phase}
+- npcId: {npc_id}
+- actionType: {action_type}
+- playerIntentText: {_safe_reply_text(player_intent_text)}
+- topicId: {topic_id}
+- evidenceId: {evidence_id}
+
+[사건 상태]
+{scene_state_json}
+
+[NPC 로컬 상태]
+{npc_state_json}
+
+[이번 질문에 대한 대화 상태]
+{conversation_state_json}
+
+[첨부된 조사 정보 지시]
+{attached_item_text}
+
+[최근 대화]
+{os.linesep.join(recent_lines) if recent_lines else '- 없음'}
+
+[응답 원칙]
+- 반드시 한국어로만 대답한다.
+- affect.interest가 높을수록 답변이 자세해지고, 낮을수록 짧고 건조해진다.
+- affect.attitude가 낮을수록 차갑고 방어적이며, 높을수록 협조적이다.
+- patience가 낮을수록 짧고 예민한 답변을 한다. patience가 매우 낮으면 더 이상 길게 설명하지 않으려 한다.
+- 시스템 설명, 상태 수치, JSON, 메타 발언은 절대 출력하지 않는다.
+- 이번 답변은 첨부된 조사 정보 지시만을 기준으로 생성한다.
+- world context나 별도의 사건 문서를 참조하지 않는다.
+- responseDirectivePrompt의 지시를 그대로 따른다.
+- responseDirectivePrompt가 회피 지시라면 회피하고, 정보 제공 지시라면 그 범위 안에서만 답한다.
+- 첨부된 조사 정보 지시와 최근 대화와 모순되지 않도록 한다.
+
+이제 NPC의 실제 대사만 출력해라.
+""".strip()
+    return prompt
 
 def _format_summary_context(summary_context: Dict[str, Any] | None) -> str:
     if not summary_context:
@@ -1303,8 +1417,8 @@ def investigation_npc_reply():
             f"[INVESTIGATION/{npc_id}/{action_type}] {_safe_reply_text(player_intent_text)}",
         )
 
-        summary_context = _read_scoped_summary(user_id, persona_key)
-        world_context_chunks = retriever.search(player_intent_text) if player_intent_text else []
+        attached_item_directive = _normalize_attached_item_directive(interaction)
+        use_attached_directive = bool(attached_item_directive.get("responseDirectivePrompt"))
 
         conversation_state = _derive_conversation_state(
             action_type,
@@ -1314,7 +1428,33 @@ def investigation_npc_reply():
             conversation_context,
             interrogation_profile,
         )
-        prompt = _build_reply_prompt(payload, persona, conversation_state, summary_context, world_context_chunks)
+
+        if use_attached_directive:
+            summary_context = None
+            world_context_chunks = []
+            print(
+                "[INVESTIGATION][REPLY_MODE] "
+                f"mode=attached npc={npc_id} itemId={attached_item_directive.get('itemId', '')} "
+                f"thresholdSatisfied={attached_item_directive.get('thresholdSatisfied', False)} "
+                f"followingItemId={attached_item_directive.get('followingItemId', '')}"
+            )
+            prompt = _build_reply_prompt_attached(
+                payload,
+                persona,
+                conversation_state,
+                attached_item_directive,
+            )
+        else:
+            summary_context = _read_scoped_summary(user_id, persona_key)
+            world_context_chunks = retriever.search(player_intent_text) if player_intent_text else []
+            print(f"[INVESTIGATION][REPLY_MODE] mode=general npc={npc_id}")
+            prompt = _build_reply_prompt_general(
+                payload,
+                persona,
+                conversation_state,
+                summary_context,
+                world_context_chunks,
+            )
         statement_id = _build_statement_id(npc_id, npc_local_state)
         message_id = f"{statement_id}_stream"
         start_time = time.time()
@@ -1371,7 +1511,7 @@ def investigation_npc_reply():
                     )
 
                 reply_text = _safe_reply_text(streamed_text)
-                unlock_topic_ids = _extract_unlock_topics(interaction, reply_text)
+                unlock_topic_ids = []
 
                 response_payload = {
                     "ok": True,
@@ -1601,7 +1741,7 @@ def investigation_npc():
                     )
 
                 reply_text = _safe_reply_text(streamed_text)
-                unlock_topic_ids = _extract_unlock_topics(interaction, reply_text)
+                unlock_topic_ids = []
 
                 response_payload = {
                     "ok": True,

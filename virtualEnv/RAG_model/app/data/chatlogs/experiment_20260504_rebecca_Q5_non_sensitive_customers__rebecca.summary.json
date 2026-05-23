@@ -1,0 +1,1 @@
+{"summary": "손님은 평소와 다름없이 많았고, 저녁 시간엔 더욱 붐볐습니다.<END> Rebecca는 특별한 인물이 눈에 띄었는지 묻는 질문에 대해 답변하고 있습니다.", "user_emotion": "중립", "user_goal": "저녁 시간 손님들의 상황을 파악하고, 특정 인물이 있었는지 확인하려는 의도", "salient_facts": ["저녁 시간에 손님이 많았음", "손님 수는 평소와 다름없음"], "entities": ["Rebecca", "손님"], "relationship_state": {"user_trust": 0.7, "closeness": "medium"}, "topics": ["손님", "저녁 시간"]}

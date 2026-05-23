@@ -49,6 +49,10 @@ os.makedirs(INDEX_DIR, exist_ok=True)
 os.makedirs(CHATLOG_DIR, exist_ok=True)
 
 
+def _log_spacer() -> None:
+    print("", flush=True)
+
+
 def _load_env_file(path: str) -> None:
     if not os.path.isfile(path):
         return
@@ -67,6 +71,7 @@ def _load_env_file(path: str) -> None:
                     os.environ[key] = value
     except Exception as error:
         print(f"[WARN] env file load failed path={path}: {error}")
+        _log_spacer()
 
 
 _load_env_file(APP_ENV_PATH)
@@ -209,6 +214,7 @@ def _log_llm_error(operation: str, error: Exception) -> None:
             f"[ERROR][LLM] operation={operation} provider={LLM_PROVIDER} "
             f"ollama_model={ACTIVE_MODEL} error={error}"
         )
+        _log_spacer()
         return
 
     detail = _get_openai_error_detail(error)
@@ -219,6 +225,7 @@ def _log_llm_error(operation: str, error: Exception) -> None:
     )
     print(f"[ERROR][LLM][OPENAI] message={detail['message']}")
     print(f"[ERROR][LLM][OPENAI] hint={_openai_error_hint(detail)}")
+    _log_spacer()
 
 
 def _query_openai_once(prompt: str) -> str:
@@ -272,10 +279,12 @@ def _validate_openai_startup() -> bool:
     try:
         reply = _query_openai_once("Reply with exactly: OK")
         print(f"[OPENAI] startup validation succeeded: {reply}")
+        _log_spacer()
         return True
     except Exception as error:
         _log_llm_error("startup_validation", error)
         print("[OPENAI] startup validation failed. The server will still start; OpenAI replies will fail until the logged issue is fixed.")
+        _log_spacer()
         return False
 
 
@@ -320,6 +329,7 @@ def _select_startup_model() -> str:
     if LLM_PROVIDER == "ollama":
         ACTIVE_MODEL = selected_option["model"]
         print(f"[MODEL] 선택된 로컬 모델: {ACTIVE_MODEL}")
+        _log_spacer()
     else:
         print(f"[MODEL] 선택된 OpenAI API 모델: {OPENAI_MODEL}")
         _validate_openai_startup()
@@ -1176,6 +1186,7 @@ def _load_world_chunks():
     print(f"[PATH] WORLD_DIR={WORLD_DIR}")
     if not os.path.isdir(WORLD_DIR):
         print(f"[WARN] WORLD_DIR not found: {WORLD_DIR}")
+        _log_spacer()
         return chunks
 
     world_files = []
@@ -1191,6 +1202,7 @@ def _load_world_chunks():
     print(f"[PATH] WORLD_FILES={len(world_files)}")
     for world_file in world_files:
         print(f"[WORLD] {world_file}")
+    _log_spacer()
     return chunks
 
 
@@ -1214,6 +1226,7 @@ def init_index():
         print(f"[PATH] Loading existing index from {INDEX_PATH}.index")
         retriever.load_index(INDEX_PATH)
         print("기존 인덱스 로드 완료")
+    _log_spacer()
 
 
 @app.route("/log/summary", methods=["GET"])
@@ -1295,6 +1308,7 @@ def investigation_npc_reply():
             f"[INVESTIGATION][REPLY] phase={phase} user={user_id} npc={npc_id} "
             f"persona={persona_key} action={action_type} turnId={turn_id}"
         )
+        _log_spacer()
 
         _append_scoped_log(
             user_id,
@@ -1334,8 +1348,10 @@ def investigation_npc_reply():
                 )
                 _write_scoped_summary(user_id, persona_key, summary)
                 print(f"[SUMMARY] updated for user={user_id}, persona={persona_key}")
+                _log_spacer()
             except Exception as e:
                 print(f"[WARN] summary update failed after reply stream: {e}")
+                _log_spacer()
 
         def generate():
             first_chunk_logged = False
@@ -1361,6 +1377,7 @@ def investigation_npc_reply():
                             f"[LATENCY] reply user={user_id} npc={npc_id} "
                             f"persona={persona_key} took {latency:.2f}s to first token"
                         )
+                        _log_spacer()
                         first_chunk_logged = True
 
                     streamed_text += chunk
@@ -1421,6 +1438,7 @@ def investigation_npc_reply():
                     "[INVESTIGATION][REPLY][TEXT] "
                     f"npc={npc_id} reply={json.dumps(reply_text, ensure_ascii=False)}"
                 )
+                _log_spacer()
 
                 threading.Thread(target=_update_summary_background, daemon=True).start()
 
@@ -1429,6 +1447,7 @@ def investigation_npc_reply():
 
                 print("[ERROR] investigation_npc_reply stream 예외 발생:")
                 traceback.print_exc()
+                _log_spacer()
                 yield _reply_stream_chunk(
                     "error",
                     messageId=message_id,
@@ -1445,6 +1464,7 @@ def investigation_npc_reply():
 
         print("[ERROR] investigation_npc_reply 예외 발생:")
         traceback.print_exc()
+        _log_spacer()
         return jsonify(_build_reply_error_response(str(e))), 500
 
 
@@ -1481,6 +1501,7 @@ def investigation_npc_tell():
             f"npc={npc_id} turnId={turn_id} tell={tell_result['tell']} "
             f"band={tell_result['band']} primaryAction={tell_result['primaryAction']}"
         )
+        _log_spacer()
 
         return jsonify({
             "ok": True,
@@ -1494,6 +1515,7 @@ def investigation_npc_tell():
 
         print("[ERROR] investigation_npc_tell 예외 발생:")
         traceback.print_exc()
+        _log_spacer()
         return jsonify(_build_tell_error_response(str(e), "")), 500
 
 
@@ -1527,6 +1549,7 @@ def investigation_npc():
             f"[INVESTIGATION] phase={phase} user={user_id} npc={npc_id} "
             f"persona={persona_key} action={action_type}"
         )
+        _log_spacer()
 
         _append_scoped_log(
             user_id,
@@ -1564,8 +1587,10 @@ def investigation_npc():
                 )
                 _write_scoped_summary(user_id, persona_key, summary)
                 print(f"[SUMMARY] updated for user={user_id}, persona={persona_key}")
+                _log_spacer()
             except Exception as e:
                 print(f"[WARN] summary update failed after investigation stream: {e}")
+                _log_spacer()
 
         def generate():
             first_chunk_logged = False
@@ -1591,6 +1616,7 @@ def investigation_npc():
                             f"[LATENCY] investigation user={user_id} npc={npc_id} "
                             f"persona={persona_key} took {latency:.2f}s to first token"
                         )
+                        _log_spacer()
                         first_chunk_logged = True
 
                     streamed_text += chunk
@@ -1649,6 +1675,7 @@ def investigation_npc():
                     f"patience={interrogation_state['patience']} "
                     f"unlocks={unlock_topic_ids}"
                 )
+                _log_spacer()
 
                 threading.Thread(target=_update_summary_background, daemon=True).start()
 
@@ -1657,6 +1684,7 @@ def investigation_npc():
 
                 print("[ERROR] investigation_npc stream 예외 발생:")
                 traceback.print_exc()
+                _log_spacer()
                 yield _investigation_stream_chunk(
                     "error",
                     messageId=message_id,
@@ -1673,6 +1701,7 @@ def investigation_npc():
 
         print("[ERROR] investigation_npc 예외 발생:")
         traceback.print_exc()
+        _log_spacer()
         return jsonify(_build_investigation_error_response(str(e))), 500
 
 
@@ -1684,6 +1713,7 @@ def ask_stream():
         user_id = data.get("user_id", "anonymous")
         persona_key = data.get("personaKey") or ""
         print(f"[DEBUG] 질문: {question}, 유저: {user_id}, 페르소나: {persona_key or 'assistant'}")
+        _log_spacer()
 
         if not question:
             return "질문이 없습니다", 400
@@ -1722,8 +1752,10 @@ def ask_stream():
                 )
                 _write_scoped_summary(user_id, persona_key, summary)
                 print(f"[SUMMARY] updated for user={user_id}, persona={persona_key}")
+                _log_spacer()
             except Exception as e:
                 print(f"[WARN] summary update failed: {e}")
+                _log_spacer()
 
         def generate():
             nonlocal start_time
@@ -1733,6 +1765,7 @@ def ask_stream():
                 if not first_chunk_logged:
                     latency = time.time() - start_time
                     print(f"[LATENCY] user={user_id} persona={persona_key or 'assistant'} took {latency:.2f}s to first token")
+                    _log_spacer()
                     first_chunk_logged = True
                 buffer.append(chunk)
                 yield chunk + "\n"
@@ -1743,6 +1776,7 @@ def ask_stream():
                 _append_scoped_log(user_id, persona_key, speaker, full_answer)
             except Exception as log_err:
                 print(f"[WARN] 답변 로그 기록 실패: {log_err}")
+                _log_spacer()
 
             threading.Thread(target=_update_summary_background, daemon=True).start()
 
@@ -1753,6 +1787,7 @@ def ask_stream():
 
         print("[ERROR] ask_stream 예외 발생:")
         traceback.print_exc()
+        _log_spacer()
         return f"[SERVER ERROR] {str(e)}", 500
 
 

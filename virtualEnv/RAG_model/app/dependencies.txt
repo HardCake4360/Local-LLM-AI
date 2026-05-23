@@ -6,6 +6,7 @@ waitress
 
 # LLM / Inference
 requests
+openai
 ollama (external service)
 
 # RAG / NLP
